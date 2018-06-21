@@ -177,7 +177,8 @@ where
                     return Ok(Async::Ready(None));
                 }
                 Err(_) => {
-                    // valve handle was dropped -- let the stream go forever
+                    // valve handle was dropped, but nothing was sent
+                    // then handle must have been disabled, so let the stream go forever
                     self.free = true;
                 }
                 Ok(Async::NotReady) => {}
