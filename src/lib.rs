@@ -35,7 +35,7 @@
 //! // the server thread will normally never exit, since more connections
 //! // can always arrive. however, with a Valved, we can turn off the
 //! // stream of incoming connections to initiate a graceful shutdown
-//! exit.close();
+//! drop(exit);
 //! server.join().unwrap();
 //! ```
 //!
@@ -73,7 +73,7 @@
 //! // the runtime will not become idle until both incoming1 and incoming2 have stopped
 //! // (due to the select). this checks that they are indeed both interrupted when the
 //! // valve is closed.
-//! exit.close();
+//! drop(exit);
 //! rt.shutdown_on_idle().wait().unwrap();
 //! ```
 
@@ -117,7 +117,7 @@ impl Valve {
     /// Make a new `Valve` and an associated [`ValveHandle`].
     pub fn new() -> (ValveHandle, Self) {
         let (tx, rx) = oneshot::channel();
-        (ValveHandle(tx), Valve(rx.shared()))
+        (ValveHandle(Some(tx)), Valve(rx.shared()))
     }
 
     /// Wrap the given `stream` with this `Valve`.
@@ -135,15 +135,30 @@ impl Valve {
 
 /// A handle to a wrapped stream.
 ///
-/// If the `ValveHandle` is dropped without calling `close`, any streams wrapped by associated
-/// valves will *not* be interrupted.
+/// If the `ValveHandle` is dropped, any streams wrapped by associated valves will be interrupted
+/// (this is equivalent to calling [`ValveHandle::close`]. To override this behavior, call
+/// [`ValveHandle::disable`].
 #[derive(Debug)]
-pub struct ValveHandle(oneshot::Sender<()>);
+pub struct ValveHandle(Option<oneshot::Sender<()>>);
 
 impl ValveHandle {
     /// Close the valve for the associated stream, and make it immediately yield `None`.
     pub fn close(self) {
-        self.0.send(()).unwrap();
+        drop(self);
+    }
+
+    /// Disable all associated valves and leave their associated streams running to completion.
+    pub fn disable(mut self) {
+        let _ = self.0.take();
+        drop(self);
+    }
+}
+
+impl Drop for ValveHandle {
+    fn drop(&mut self) {
+        if let Some(tx) = self.0.take() {
+            tx.send(()).unwrap();
+        }
     }
 }
 
@@ -204,7 +219,7 @@ mod tests {
         // the server thread will normally never exit, since more connections
         // can always arrive. however, with a Valved, we can turn off the
         // stream of incoming connections to initiate a graceful shutdown
-        exit.close();
+        drop(exit);
         server.join().unwrap();
     }
 
@@ -227,7 +242,7 @@ mod tests {
                 }),
         );
 
-        exit.close();
+        drop(exit);
         rt.shutdown_on_idle().wait().unwrap();
     }
 
@@ -256,7 +271,7 @@ mod tests {
 
         // the runtime will not become idle until both incoming1 and incoming2 have stopped (due to
         // the select). this checks that they are indeed both interrupted when the valve is closed.
-        exit.close();
+        drop(exit);
         rt.shutdown_on_idle().wait().unwrap();
     }
 }

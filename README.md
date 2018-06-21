@@ -40,7 +40,7 @@ let server = thread::spawn(move || {
 // the server thread will normally never exit, since more connections
 // can always arrive. however, with a Valved, we can turn off the
 // stream of incoming connections to initiate a graceful shutdown
-exit.close();
+drop(exit);
 server.join().unwrap();
 ```
 
@@ -77,6 +77,6 @@ rt.spawn(
 // the runtime will not become idle until both incoming1 and incoming2 have stopped
 // (due to the select). this checks that they are indeed both interrupted when the
 // valve is closed.
-exit.close();
+drop(exit);
 rt.shutdown_on_idle().wait().unwrap();
 ```
