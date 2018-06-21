@@ -74,8 +74,9 @@ rt.spawn(
         }),
 );
 
-// the runtime will not become idle until both incoming1 and incoming2 have stopped (due to
-// the select). this checks that they are indeed both interrupted when the valve is closed.
+// the runtime will not become idle until both incoming1 and incoming2 have stopped
+// (due to the select). this checks that they are indeed both interrupted when the
+// valve is closed.
 exit.close();
 rt.shutdown_on_idle().wait().unwrap();
 ```
