@@ -1,20 +1,20 @@
 //! This crate provides a mechanism for interrupting a `Stream`.
 //!
-//! Any stream can be wrapped in a [`Valve`], which enables it to be remotely terminated through an
-//! associated [`ValveHandle`]. This can be useful to implement graceful shutdown on "infinite"
+//! Any stream can be wrapped in a [`Valved`], which enables it to be remotely terminated through
+//! an associated [`ValveHandle`]. This can be useful to implement graceful shutdown on "infinite"
 //! streams like a `TcpListener`. Once [`ValveHandle::close`] is called on the handle for a given
-//! stream's [`Valve`], the stream will yield `None` to indicate that it has terminated.
+//! stream's [`Valved`], the stream will yield `None` to indicate that it has terminated.
 //!
 //! ```
 //! # extern crate stream_cancel;
 //! extern crate tokio;
 //!
-//! use stream_cancel::Valve;
+//! use stream_cancel::Valved;
 //! use tokio::prelude::*;
 //! use std::thread;
 //!
 //! let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-//! let (exit, incoming) = Valve::new(listener.incoming());
+//! let (exit, incoming) = Valved::new(listener.incoming());
 //!
 //! let server = thread::spawn(move || {
 //!     // start a tokio echo server
@@ -33,10 +33,47 @@
 //! });
 //!
 //! // the server thread will normally never exit, since more connections
-//! // can always arrive. however, with a Valve, we can turn off the
+//! // can always arrive. however, with a Valved, we can turn off the
 //! // stream of incoming connections to initiate a graceful shutdown
 //! exit.close();
 //! server.join().unwrap();
+//! ```
+//!
+//! You can share the same [`ValveHandle`] between multiple streams by first creating a [`Valve`],
+//! and then wrapping multiple streams using [`Valve::Wrap`]:
+//!
+//! ```
+//! # extern crate stream_cancel;
+//! extern crate tokio;
+//!
+//! use stream_cancel::Valve;
+//! use tokio::prelude::*;
+//!
+//! let (exit, valve) = Valve::new();
+//! let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+//! let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+//! let incoming1 = valve.wrap(listener1.incoming());
+//! let incoming2 = valve.wrap(listener2.incoming());
+//!
+//! let mut rt = tokio::runtime::Runtime::new().unwrap();
+//! rt.spawn(
+//!     incoming1
+//!         .select(incoming2)
+//!         .map_err(|e| eprintln!("accept failed = {:?}", e))
+//!         .for_each(|sock| {
+//!             let (reader, writer) = sock.split();
+//!             tokio::spawn(
+//!                 tokio::io::copy(reader, writer)
+//!                     .map(|amt| println!("wrote {:?} bytes", amt))
+//!                     .map_err(|err| eprintln!("IO error {:?}", err)),
+//!             )
+//!         }),
+//! );
+//!
+//! // the runtime will not become idle until both incoming1 and incoming2 have stopped (due to
+//! // the select). this checks that they are indeed both interrupted when the valve is closed.
+//! exit.close();
+//! rt.shutdown_on_idle().wait().unwrap();
 //! ```
 
 #![deny(missing_docs)]
@@ -48,35 +85,57 @@ extern crate tokio;
 
 use futures::{future::Shared, sync::oneshot, Async, Future, Poll, Stream};
 
-/// A `Valve` is wrapper around a `Stream` that enables the stream to be turned off remotely to
-/// initiate a graceful shutdown. When a new `Valve` is created with [`Valve::new`], a handle to
-/// that `Valve` is also produced; when [`ValveHandle::close`] is called on that handle, the
+/// A `Valved` is wrapper around a `Stream` that enables the stream to be turned off remotely to
+/// initiate a graceful shutdown. When a new `Valved` is created with [`Valved::new`], a handle to
+/// that `Valved` is also produced; when [`ValveHandle::close`] is called on that handle, the
 /// wrapped stream will immediately yield `None` to indicate that it has completed.
 #[derive(Clone, Debug)]
-pub struct Valve<S> {
+pub struct Valved<S> {
     stream: S,
     valve: Shared<oneshot::Receiver<()>>,
     free: bool,
 }
 
-impl<S> Valve<S> {
+impl<S> Valved<S> {
     /// Make the given stream cancellable.
     ///
     /// To cancel the stream, call [`ValveHandle::close`] on the returned handle.
     pub fn new(stream: S) -> (ValveHandle, Self) {
+        let (vh, v) = Valve::new();
+        (vh, v.wrap(stream))
+    }
+}
+
+/// A `Valve` is associated with a [`ValveHandle`], and can be used to wrap one or more
+/// asynchronous streams. All streams wrapped by a given `Valve` (or its clones) will be
+/// interrupted when [`ValveHandle::close`] is called on the valve's associated handle.
+#[derive(Clone, Debug)]
+pub struct Valve(Shared<oneshot::Receiver<()>>);
+
+impl Valve {
+    /// Make a new `Valve` and an associated [`ValveHandle`].
+    pub fn new() -> (ValveHandle, Self) {
         let (tx, rx) = oneshot::channel();
-        (
-            ValveHandle(tx),
-            Valve {
-                stream,
-                valve: rx.shared(),
-                free: false,
-            },
-        )
+        (ValveHandle(tx), Valve(rx.shared()))
+    }
+
+    /// Wrap the given `stream` with this `Valve`.
+    ///
+    /// When [`ValveHandle::close`] is called on the handle associated with this valve, the given
+    /// stream will immediately yield `None`.
+    pub fn wrap<S>(&self, stream: S) -> Valved<S> {
+        Valved {
+            stream,
+            valve: self.0.clone(),
+            free: false,
+        }
     }
 }
 
 /// A handle to a wrapped stream.
+///
+/// If the `ValveHandle` is dropped without calling `close`, any streams wrapped by associated
+/// valves will *not* be interrupted.
 #[derive(Debug)]
 pub struct ValveHandle(oneshot::Sender<()>);
 
@@ -87,7 +146,7 @@ impl ValveHandle {
     }
 }
 
-impl<S> Stream for Valve<S>
+impl<S> Stream for Valved<S>
 where
     S: Stream,
 {
@@ -123,7 +182,7 @@ mod tests {
         use std::thread;
 
         let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-        let (exit, incoming) = Valve::new(listener.incoming());
+        let (exit, incoming) = Valved::new(listener.incoming());
 
         let server = thread::spawn(move || {
             // start a tokio echo server
@@ -142,7 +201,7 @@ mod tests {
         });
 
         // the server thread will normally never exit, since more connections
-        // can always arrive. however, with a Valve, we can turn off the
+        // can always arrive. however, with a Valved, we can turn off the
         // stream of incoming connections to initiate a graceful shutdown
         exit.close();
         server.join().unwrap();
@@ -151,7 +210,7 @@ mod tests {
     #[test]
     fn tokio_rt_on_idle() {
         let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-        let (exit, incoming) = Valve::new(listener.incoming());
+        let (exit, incoming) = Valved::new(listener.incoming());
 
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         rt.spawn(
@@ -167,6 +226,35 @@ mod tests {
                 }),
         );
 
+        exit.close();
+        rt.shutdown_on_idle().wait().unwrap();
+    }
+
+    #[test]
+    fn multi_interrupt() {
+        let (exit, valve) = Valve::new();
+        let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let incoming1 = valve.wrap(listener1.incoming());
+        let incoming2 = valve.wrap(listener2.incoming());
+
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        rt.spawn(
+            incoming1
+                .select(incoming2)
+                .map_err(|e| eprintln!("accept failed = {:?}", e))
+                .for_each(|sock| {
+                    let (reader, writer) = sock.split();
+                    tokio::spawn(
+                        tokio::io::copy(reader, writer)
+                            .map(|amt| println!("wrote {:?} bytes", amt))
+                            .map_err(|err| eprintln!("IO error {:?}", err)),
+                    )
+                }),
+        );
+
+        // the runtime will not become idle until both incoming1 and incoming2 have stopped (due to
+        // the select). this checks that they are indeed both interrupted when the valve is closed.
         exit.close();
         rt.shutdown_on_idle().wait().unwrap();
     }
