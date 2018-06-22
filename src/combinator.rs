@@ -4,6 +4,7 @@ use Trigger;
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
 /// This structure is produced by the [`StreamExt::take_until`] method.
+#[derive(Clone, Debug)]
 pub struct TakeUntil<S, F> {
     stream: S,
     until: F,
