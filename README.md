@@ -4,11 +4,55 @@
 [![Documentation](https://docs.rs/stream-cancel/badge.svg)](https://docs.rs/stream-cancel/)
 [![Build Status](https://travis-ci.org/jonhoo/stream-cancel.svg?branch=master)](https://travis-ci.org/jonhoo/stream-cancel)
 
-This crate provides a mechanism for interrupting a `Stream`.
+This crate provides multiple mechanisms for interrupting a `Stream`.
+
+## Stream combinator
+
+The extension trait [`StreamExt`] provides a single new `Stream` combinator: `take_until`.
+[`StreamExt::take_until`] continues yielding elements from the underlying `Stream` until a
+`Future` resolves, and at that moment immediately yields `None` and stops producing further
+elements.
+
+For convenience, the crate also includes the [`Tripwire`] type, which produces a cloneable
+`Future` that can then be passed to `take_until`. When a new `Tripwire` is created, an
+associated [`Trigger`] is also returned, which interrupts the `Stream` when it is dropped.
+
+
+```rust
+extern crate tokio;
+
+use stream_cancel::{StreamExt, Tripwire};
+use tokio::prelude::*;
+
+let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+let (trigger, tripwire) = Tripwire::new();
+
+let mut rt = tokio::runtime::Runtime::new().unwrap();
+rt.spawn(
+    listener
+        .incoming()
+        .take_until(tripwire)
+        .map_err(|e| eprintln!("accept failed = {:?}", e))
+        .for_each(|sock| {
+            let (reader, writer) = sock.split();
+            tokio::spawn(
+                tokio::io::copy(reader, writer)
+                    .map(|amt| println!("wrote {:?} bytes", amt))
+                    .map_err(|err| eprintln!("IO error {:?}", err)),
+            )
+        }),
+);
+
+// tell the listener to stop accepting new connections
+drop(trigger);
+rt.shutdown_on_idle().wait().unwrap();
+```
+
+## Stream wrapper
 
 Any stream can be wrapped in a [`Valved`], which enables it to be remotely terminated through
-an associated [`ValveHandle`]. This can be useful to implement graceful shutdown on "infinite"
-streams like a `TcpListener`. Once [`ValveHandle::close`] is called on the handle for a given
+an associated [`Trigger`]. This can be useful to implement graceful shutdown on "infinite"
+streams like a `TcpListener`. Once [`Trigger::close`] is called on the handle for a given
 stream's [`Valved`], the stream will yield `None` to indicate that it has terminated.
 
 ```rust
@@ -44,7 +88,7 @@ drop(exit);
 server.join().unwrap();
 ```
 
-You can share the same [`ValveHandle`] between multiple streams by first creating a [`Valve`],
+You can share the same [`Trigger`] between multiple streams by first creating a [`Valve`],
 and then wrapping multiple streams using [`Valve::Wrap`]:
 
 ```rust
