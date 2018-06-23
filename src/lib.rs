@@ -251,4 +251,108 @@ mod tests {
         drop(exit);
         rt.shutdown_on_idle().wait().unwrap();
     }
+
+    #[test]
+    fn yields_many() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering}, Arc,
+        };
+
+        let (exit, valve) = Valve::new();
+        let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let incoming = valve.wrap(listener.incoming());
+
+        let reqs = Arc::new(AtomicUsize::new(0));
+        let got = reqs.clone();
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        rt.spawn(
+            incoming
+                .map_err(|e| panic!("accept failed = {:?}", e))
+                .for_each(move |sock| {
+                    reqs.fetch_add(1, Ordering::SeqCst);
+                    let (reader, writer) = sock.split();
+                    tokio::spawn(
+                        tokio::io::copy(reader, writer)
+                            .map(|_| ())
+                            .map_err(|err| panic!("IO error {:?}", err)),
+                    )
+                }),
+        );
+
+        {
+            tokio::net::TcpStream::connect(&addr)
+                .and_then(|s| tokio::io::write_all(s, b"hello"))
+                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
+                .and_then(|(_, buf)| {
+                    assert_eq!(buf, b"hello");
+                    tokio::net::TcpStream::connect(&addr)
+                })
+                .and_then(|s| tokio::io::write_all(s, b"world"))
+                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
+                .inspect(|&(_, ref buf)| {
+                    assert_eq!(buf, b"world");
+                })
+                .wait()
+                .unwrap();
+        }
+        assert_eq!(got.load(Ordering::SeqCst), 2);
+
+        drop(exit);
+        rt.shutdown_on_idle().wait().unwrap();
+    }
+
+    #[test]
+    fn yields_some() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering}, Arc,
+        };
+
+        let (exit, valve) = Valve::new();
+        let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let addr1 = listener1.local_addr().unwrap();
+        let addr2 = listener2.local_addr().unwrap();
+        let incoming1 = valve.wrap(listener1.incoming());
+        let incoming2 = valve.wrap(listener2.incoming());
+
+        let reqs = Arc::new(AtomicUsize::new(0));
+        let got = reqs.clone();
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        rt.spawn(
+            incoming1
+                .select(incoming2)
+                .map_err(|e| panic!("accept failed = {:?}", e))
+                .for_each(move |sock| {
+                    reqs.fetch_add(1, Ordering::SeqCst);
+                    let (reader, writer) = sock.split();
+                    tokio::spawn(
+                        tokio::io::copy(reader, writer)
+                            .map(|_| ())
+                            .map_err(|err| panic!("IO error {:?}", err)),
+                    )
+                }),
+        );
+
+        {
+            tokio::net::TcpStream::connect(&addr1)
+                .and_then(|s| tokio::io::write_all(s, b"hello"))
+                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
+                .and_then(|(_, buf)| {
+                    assert_eq!(buf, b"hello");
+                    tokio::net::TcpStream::connect(&addr2)
+                })
+                .and_then(|s| tokio::io::write_all(s, b"world"))
+                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
+                .inspect(|&(_, ref buf)| {
+                    assert_eq!(buf, b"world");
+                })
+                .wait()
+                .unwrap();
+        }
+        assert_eq!(got.load(Ordering::SeqCst), 2);
+
+        drop(exit);
+        rt.shutdown_on_idle().wait().unwrap();
+    }
 }
