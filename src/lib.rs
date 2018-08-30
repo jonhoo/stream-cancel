@@ -162,7 +162,7 @@ impl Drop for Trigger {
         if let Some(tx) = self.0.take() {
             // Send may fail when all associated rx'es are dropped already
             // so code here cannot panic on error
-            tx.send(()).unwrap_or_else(|_| ())
+            let _ = tx.send(());
         }
     }
 }
