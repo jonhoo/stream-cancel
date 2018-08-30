@@ -257,7 +257,8 @@ mod tests {
     #[test]
     fn yields_many() {
         use std::sync::{
-            atomic::{AtomicUsize, Ordering}, Arc,
+            atomic::{AtomicUsize, Ordering},
+            Arc,
         };
 
         let (exit, valve) = Valve::new();
@@ -307,7 +308,8 @@ mod tests {
     #[test]
     fn yields_some() {
         use std::sync::{
-            atomic::{AtomicUsize, Ordering}, Arc,
+            atomic::{AtomicUsize, Ordering},
+            Arc,
         };
 
         let (exit, valve) = Valve::new();

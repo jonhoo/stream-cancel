@@ -65,11 +65,7 @@ pub trait StreamExt: Stream {
     }
 }
 
-impl<S> StreamExt for S
-where
-    S: Stream,
-{
-}
+impl<S> StreamExt for S where S: Stream {}
 
 impl<S, F> Stream for TakeUntil<S, F>
 where

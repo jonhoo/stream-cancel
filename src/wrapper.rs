@@ -58,11 +58,10 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use futures::stream::empty;
     use super::*;
+    use futures::stream::empty;
     #[test]
     fn valved_stream_may_be_dropped_safely() {
         let _orphan = {
@@ -73,4 +72,3 @@ mod tests {
         };
     }
 }
-
