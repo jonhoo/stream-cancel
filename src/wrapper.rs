@@ -57,3 +57,20 @@ where
         self.0.poll()
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use futures::stream::empty;
+    use super::*;
+    #[test]
+    fn valved_stream_may_be_dropped_safely() {
+        let _orphan = {
+            let s = empty::<(), ()>();
+            let (trigger, valve) = Valve::new();
+            let _wrapped = valve.wrap(s);
+            trigger
+        };
+    }
+}
+

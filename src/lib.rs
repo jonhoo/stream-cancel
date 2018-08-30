@@ -160,7 +160,9 @@ impl Trigger {
 impl Drop for Trigger {
     fn drop(&mut self) {
         if let Some(tx) = self.0.take() {
-            tx.send(()).unwrap();
+            // Send may fail when all associated rx'es are dropped already
+            // so code here cannot panic on error
+            tx.send(()).unwrap_or_else(|_| ())
         }
     }
 }
