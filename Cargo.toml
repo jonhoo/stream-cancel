@@ -1,6 +1,6 @@
 [package]
 name = "stream-cancel"
-version = "0.4.3"
+version = "0.4.4"
 
 description = "A library for interrupting asynchronous streams."
 readme = "README.md"
@@ -16,7 +16,8 @@ categories = ["network-programming", "asynchronous"]
 license = "MIT/Apache-2.0"
 
 [badges]
-travis-ci = { repository = "jonhoo/async-ssh" }
+travis-ci = { repository = "jonhoo/stream-cancel" }
+maintenance = { status = "passively-maintained" }
 
 [dependencies]
 futures = "0.1"
