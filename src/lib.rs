@@ -13,34 +13,28 @@
 //!
 //!
 //! ```
-//! # extern crate stream_cancel;
-//! extern crate tokio;
-//!
 //! use stream_cancel::{StreamExt, Tripwire};
 //! use tokio::prelude::*;
 //!
-//! let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-//! let (trigger, tripwire) = Tripwire::new();
+//! #[tokio::main]
+//! async fn main() {
+//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let (trigger, tripwire) = Tripwire::new();
 //!
-//! let mut rt = tokio::runtime::Runtime::new().unwrap();
-//! rt.spawn(
-//!     listener
-//!         .incoming()
-//!         .take_until(tripwire)
-//!         .map_err(|e| eprintln!("accept failed = {:?}", e))
-//!         .for_each(|sock| {
-//!             let (reader, writer) = sock.split();
-//!             tokio::spawn(
-//!                 tokio::io::copy(reader, writer)
-//!                     .map(|amt| println!("wrote {:?} bytes", amt))
-//!                     .map_err(|err| eprintln!("IO error {:?}", err)),
-//!             )
-//!         }),
-//! );
+//!     tokio::spawn(async move {
+//!         let mut incoming = listener.incoming().take_until(tripwire);
+//!         while let Some(s) = incoming.next().await.transpose().unwrap() {
+//!             let (mut r, mut w) = s.split();
+//!             tokio::spawn(async move {
+//!                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
+//!             });
+//!         }
+//!     });
 //!
-//! // tell the listener to stop accepting new connections
-//! drop(trigger);
-//! rt.shutdown_on_idle().wait().unwrap();
+//!     // tell the listener to stop accepting new connections
+//!     drop(trigger);
+//!     // the spawned async block will terminate cleanly, allowing main to return
+//! }
 //! ```
 //!
 //! # Stream wrapper
@@ -51,91 +45,74 @@
 //! stream's [`Valved`], the stream will yield `None` to indicate that it has terminated.
 //!
 //! ```
-//! # extern crate stream_cancel;
-//! extern crate tokio;
-//!
 //! use stream_cancel::Valved;
 //! use tokio::prelude::*;
 //! use std::thread;
 //!
-//! let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-//! let (exit, incoming) = Valved::new(listener.incoming());
+//! #[tokio::main]
+//! async fn main() {
+//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let (exit, mut incoming) = Valved::new(listener.incoming());
 //!
-//! let server = thread::spawn(move || {
-//!     // start a tokio echo server
-//!     tokio::run(
-//!         incoming
-//!             .map_err(|e| eprintln!("accept failed = {:?}", e))
-//!             .for_each(|sock| {
-//!                 let (reader, writer) = sock.split();
-//!                 tokio::spawn(
-//!                     tokio::io::copy(reader, writer)
-//!                         .map(|amt| println!("wrote {:?} bytes", amt))
-//!                         .map_err(|err| eprintln!("IO error {:?}", err)),
-//!                 )
-//!             }),
-//!     )
-//! });
+//!     tokio::spawn(async move {
+//!         while let Some(s) = incoming.next().await.transpose().unwrap() {
+//!             let (mut r, mut w) = s.split();
+//!             tokio::spawn(async move {
+//!                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
+//!             });
+//!         }
+//!     });
 //!
-//! // the server thread will normally never exit, since more connections
-//! // can always arrive. however, with a Valved, we can turn off the
-//! // stream of incoming connections to initiate a graceful shutdown
-//! drop(exit);
-//! server.join().unwrap();
+//!     // the server thread will normally never exit, since more connections
+//!     // can always arrive. however, with a Valved, we can turn off the
+//!     // stream of incoming connections to initiate a graceful shutdown
+//!     drop(exit);
+//! }
 //! ```
 //!
 //! You can share the same [`Trigger`] between multiple streams by first creating a [`Valve`],
 //! and then wrapping multiple streams using [`Valve::Wrap`]:
 //!
 //! ```
-//! # extern crate stream_cancel;
-//! extern crate tokio;
-//!
 //! use stream_cancel::Valve;
 //! use tokio::prelude::*;
 //!
-//! let (exit, valve) = Valve::new();
-//! let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-//! let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-//! let incoming1 = valve.wrap(listener1.incoming());
-//! let incoming2 = valve.wrap(listener2.incoming());
+//! #[tokio::main]
+//! async fn main() {
+//!     let (exit, valve) = Valve::new();
+//!     let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let incoming1 = valve.wrap(listener1.incoming());
+//!     let incoming2 = valve.wrap(listener2.incoming());
 //!
-//! let mut rt = tokio::runtime::Runtime::new().unwrap();
-//! rt.spawn(
-//!     incoming1
-//!         .select(incoming2)
-//!         .map_err(|e| eprintln!("accept failed = {:?}", e))
-//!         .for_each(|sock| {
-//!             let (reader, writer) = sock.split();
-//!             tokio::spawn(
-//!                 tokio::io::copy(reader, writer)
-//!                     .map(|amt| println!("wrote {:?} bytes", amt))
-//!                     .map_err(|err| eprintln!("IO error {:?}", err)),
-//!             )
-//!         }),
-//! );
+//!     tokio::spawn(async move {
+//!         use futures_util::stream::select;
+//!         let mut incoming = select(incoming1, incoming2);
+//!         while let Some(s) = incoming.next().await.transpose().unwrap() {
+//!             let (mut r, mut w) = s.split();
+//!             tokio::spawn(async move {
+//!                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
+//!             });
+//!         }
+//!     });
 //!
-//! // the runtime will not become idle until both incoming1 and incoming2 have stopped
-//! // (due to the select). this checks that they are indeed both interrupted when the
-//! // valve is closed.
-//! drop(exit);
-//! rt.shutdown_on_idle().wait().unwrap();
+//!     // the runtime will not become idle until both incoming1 and incoming2 have stopped
+//!     // (due to the select). this checks that they are indeed both interrupted when the
+//!     // valve is closed.
+//!     drop(exit);
+//! }
 //! ```
 
 #![deny(missing_docs)]
+#![warn(rust_2018_idioms)]
 
-extern crate futures;
-
-#[cfg(test)]
-extern crate tokio;
-
-use futures::sync::oneshot;
+use tokio::sync::oneshot;
 
 mod combinator;
 mod wrapper;
 
-pub use combinator::{StreamExt, TakeUntil, Tripwire};
-pub use wrapper::{Valve, Valved};
+pub use crate::combinator::{StreamExt, TakeUntil, Tripwire};
+pub use crate::wrapper::{Valve, Valved};
 
 /// A handle to a set of cancellable streams.
 ///
@@ -170,29 +147,30 @@ impl Drop for Trigger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::stream::select;
     use tokio::prelude::*;
 
     #[test]
     fn tokio_run() {
         use std::thread;
 
-        let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-        let (exit, incoming) = Valved::new(listener.incoming());
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let listener = rt
+            .block_on(tokio::net::TcpListener::bind("0.0.0.0:0"))
+            .unwrap();
+        let (exit, mut incoming) = Valved::new(listener.incoming());
 
         let server = thread::spawn(move || {
             // start a tokio echo server
-            tokio::run(
-                incoming
-                    .map_err(|e| eprintln!("accept failed = {:?}", e))
-                    .for_each(|sock| {
-                        let (reader, writer) = sock.split();
-                        tokio::spawn(
-                            tokio::io::copy(reader, writer)
-                                .map(|amt| println!("wrote {:?} bytes", amt))
-                                .map_err(|err| eprintln!("IO error {:?}", err)),
-                        )
-                    }),
-            )
+            rt.block_on(async move {
+                while let Some(s) = incoming.next().await.transpose().unwrap() {
+                    let (mut r, mut w) = s.split();
+                    tokio::spawn(async move {
+                        r.copy(&mut w).await.unwrap();
+                    });
+                }
+            });
+            rt.shutdown_on_idle();
         });
 
         // the server thread will normally never exit, since more connections
@@ -202,119 +180,99 @@ mod tests {
         server.join().unwrap();
     }
 
-    #[test]
-    fn tokio_rt_on_idle() {
-        let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-        let (exit, incoming) = Valved::new(listener.incoming());
+    #[tokio::test]
+    async fn tokio_rt_on_idle() {
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let (exit, mut incoming) = Valved::new(listener.incoming());
 
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(
-            incoming
-                .map_err(|e| eprintln!("accept failed = {:?}", e))
-                .for_each(|sock| {
-                    let (reader, writer) = sock.split();
-                    tokio::spawn(
-                        tokio::io::copy(reader, writer)
-                            .map(|amt| println!("wrote {:?} bytes", amt))
-                            .map_err(|err| eprintln!("IO error {:?}", err)),
-                    )
-                }),
-        );
+        tokio::spawn(async move {
+            while let Some(s) = incoming.next().await.transpose().unwrap() {
+                let (mut r, mut w) = s.split();
+                tokio::spawn(async move {
+                    r.copy(&mut w).await.unwrap();
+                });
+            }
+        });
 
         drop(exit);
-        rt.shutdown_on_idle().wait().unwrap();
     }
 
-    #[test]
-    fn multi_interrupt() {
+    #[tokio::test]
+    async fn multi_interrupt() {
         let (exit, valve) = Valve::new();
-        let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-        let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         let incoming1 = valve.wrap(listener1.incoming());
         let incoming2 = valve.wrap(listener2.incoming());
 
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(
-            incoming1
-                .select(incoming2)
-                .map_err(|e| eprintln!("accept failed = {:?}", e))
-                .for_each(|sock| {
-                    let (reader, writer) = sock.split();
-                    tokio::spawn(
-                        tokio::io::copy(reader, writer)
-                            .map(|amt| println!("wrote {:?} bytes", amt))
-                            .map_err(|err| eprintln!("IO error {:?}", err)),
-                    )
-                }),
-        );
+        tokio::spawn(async move {
+            let mut incoming = select(incoming1, incoming2);
+            while let Some(s) = incoming.next().await.transpose().unwrap() {
+                let (mut r, mut w) = s.split();
+                tokio::spawn(async move {
+                    r.copy(&mut w).await.unwrap();
+                });
+            }
+        });
 
         // the runtime will not become idle until both incoming1 and incoming2 have stopped (due to
         // the select). this checks that they are indeed both interrupted when the valve is closed.
         drop(exit);
-        rt.shutdown_on_idle().wait().unwrap();
     }
 
-    #[test]
-    fn yields_many() {
+    #[tokio::test]
+    async fn yields_many() {
         use std::sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         };
 
         let (exit, valve) = Valve::new();
-        let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let incoming = valve.wrap(listener.incoming());
+        let mut incoming = valve.wrap(listener.incoming());
 
         let reqs = Arc::new(AtomicUsize::new(0));
         let got = reqs.clone();
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(
-            incoming
-                .map_err(|e| panic!("accept failed = {:?}", e))
-                .for_each(move |sock| {
-                    reqs.fetch_add(1, Ordering::SeqCst);
-                    let (reader, writer) = sock.split();
-                    tokio::spawn(
-                        tokio::io::copy(reader, writer)
-                            .map(|_| ())
-                            .map_err(|err| panic!("IO error {:?}", err)),
-                    )
-                }),
-        );
+        tokio::spawn(async move {
+            while let Some(s) = incoming.next().await.transpose().unwrap() {
+                reqs.fetch_add(1, Ordering::SeqCst);
+                let (mut r, mut w) = s.split();
+                tokio::spawn(async move {
+                    r.copy(&mut w).await.unwrap();
+                });
+            }
+        });
 
-        {
-            tokio::net::TcpStream::connect(&addr)
-                .and_then(|s| tokio::io::write_all(s, b"hello"))
-                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
-                .and_then(|(_, buf)| {
-                    assert_eq!(buf, b"hello");
-                    tokio::net::TcpStream::connect(&addr)
-                })
-                .and_then(|s| tokio::io::write_all(s, b"world"))
-                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
-                .inspect(|&(_, ref buf)| {
-                    assert_eq!(buf, b"world");
-                })
-                .wait()
-                .unwrap();
-        }
+        let mut s = tokio::net::TcpStream::connect(&addr).await.unwrap();
+        s.write_all(b"hello").await.unwrap();
+        let mut buf = [0; 5];
+        s.read_exact(&mut buf[..]).await.unwrap();
+        assert_eq!(&buf, b"hello");
+        drop(s);
+
+        let mut s = tokio::net::TcpStream::connect(&addr).await.unwrap();
+        s.write_all(b"world").await.unwrap();
+        let mut buf = [0; 5];
+        s.read_exact(&mut buf[..]).await.unwrap();
+        assert_eq!(&buf, b"world");
+        drop(s);
+
         assert_eq!(got.load(Ordering::SeqCst), 2);
 
         drop(exit);
-        rt.shutdown_on_idle().wait().unwrap();
     }
 
-    #[test]
-    fn yields_some() {
+    #[tokio::test]
+    async fn yields_some() {
         use std::sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         };
 
         let (exit, valve) = Valve::new();
-        let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-        let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
+        let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         let addr1 = listener1.local_addr().unwrap();
         let addr2 = listener2.local_addr().unwrap();
         let incoming1 = valve.wrap(listener1.incoming());
@@ -322,41 +280,34 @@ mod tests {
 
         let reqs = Arc::new(AtomicUsize::new(0));
         let got = reqs.clone();
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(
-            incoming1
-                .select(incoming2)
-                .map_err(|e| panic!("accept failed = {:?}", e))
-                .for_each(move |sock| {
-                    reqs.fetch_add(1, Ordering::SeqCst);
-                    let (reader, writer) = sock.split();
-                    tokio::spawn(
-                        tokio::io::copy(reader, writer)
-                            .map(|_| ())
-                            .map_err(|err| panic!("IO error {:?}", err)),
-                    )
-                }),
-        );
 
-        {
-            tokio::net::TcpStream::connect(&addr1)
-                .and_then(|s| tokio::io::write_all(s, b"hello"))
-                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
-                .and_then(|(_, buf)| {
-                    assert_eq!(buf, b"hello");
-                    tokio::net::TcpStream::connect(&addr2)
-                })
-                .and_then(|s| tokio::io::write_all(s, b"world"))
-                .and_then(|(s, _)| tokio::io::read_exact(s, vec![0; 5]))
-                .inspect(|&(_, ref buf)| {
-                    assert_eq!(buf, b"world");
-                })
-                .wait()
-                .unwrap();
-        }
+        tokio::spawn(async move {
+            let mut incoming = select(incoming1, incoming2);
+            while let Some(s) = incoming.next().await.transpose().unwrap() {
+                reqs.fetch_add(1, Ordering::SeqCst);
+                let (mut r, mut w) = s.split();
+                tokio::spawn(async move {
+                    r.copy(&mut w).await.unwrap();
+                });
+            }
+        });
+
+        let mut s = tokio::net::TcpStream::connect(&addr1).await.unwrap();
+        s.write_all(b"hello").await.unwrap();
+        let mut buf = [0; 5];
+        s.read_exact(&mut buf[..]).await.unwrap();
+        assert_eq!(&buf, b"hello");
+        drop(s);
+
+        let mut s = tokio::net::TcpStream::connect(&addr2).await.unwrap();
+        s.write_all(b"world").await.unwrap();
+        let mut buf = [0; 5];
+        s.read_exact(&mut buf[..]).await.unwrap();
+        assert_eq!(&buf, b"world");
+        drop(s);
+
         assert_eq!(got.load(Ordering::SeqCst), 2);
 
         drop(exit);
-        rt.shutdown_on_idle().wait().unwrap();
     }
 }

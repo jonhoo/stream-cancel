@@ -1,5 +1,7 @@
-use futures::{Poll, Stream};
-use {StreamExt, TakeUntil, Trigger, Tripwire};
+use crate::{StreamExt, TakeUntil, Trigger, Tripwire};
+use futures_core::stream::Stream;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 /// A `Valve` is associated with a [`Trigger`], and can be used to wrap one or more
 /// asynchronous streams. All streams wrapped by a given `Valve` (or its clones) will be
@@ -51,21 +53,22 @@ where
     S: Stream,
 {
     type Item = S::Item;
-    type Error = S::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.0.poll()
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // safe since we never move nor leak &mut
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
+        inner.poll_next(cx)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::stream::empty;
+    use futures_util::stream::empty;
     #[test]
     fn valved_stream_may_be_dropped_safely() {
         let _orphan = {
-            let s = empty::<(), ()>();
+            let s = empty::<()>();
             let (trigger, valve) = Valve::new();
             let _wrapped = valve.wrap(s);
             trigger
