@@ -43,7 +43,7 @@ pub trait StreamExt: Stream {
     ///     tokio::spawn(async move {
     ///         let mut incoming = listener.incoming().take_until(rx.map(|_| true));
     ///         while let Some(s) = incoming.next().await.transpose().unwrap() {
-    ///             let (mut r, mut w) = s.split();
+    ///             let (mut r, mut w) = tokio::io::split(s);
     ///             tokio::spawn(async move {
     ///                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
     ///             });
