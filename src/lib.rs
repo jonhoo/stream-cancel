@@ -23,9 +23,9 @@
 //!
 //!     tokio::spawn(async move {
 //!         let mut incoming = listener.incoming().take_until(tripwire);
-//!         while let Some(s) = incoming.next().await.transpose().unwrap() {
-//!             let (mut r, mut w) = tokio::io::split(s);
+//!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
+//!                 let (mut r, mut w) = s.split();
 //!                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
 //!             });
 //!         }
@@ -55,9 +55,9 @@
 //!     let (exit, mut incoming) = Valved::new(listener.incoming());
 //!
 //!     tokio::spawn(async move {
-//!         while let Some(s) = incoming.next().await.transpose().unwrap() {
-//!             let (mut r, mut w) = tokio::io::split(s);
+//!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
+//!                 let (mut r, mut w) = s.split();
 //!                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
 //!             });
 //!         }
@@ -88,9 +88,9 @@
 //!     tokio::spawn(async move {
 //!         use futures_util::stream::select;
 //!         let mut incoming = select(incoming1, incoming2);
-//!         while let Some(s) = incoming.next().await.transpose().unwrap() {
-//!             let (mut r, mut w) = tokio::io::split(s);
+//!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
+//!                 let (mut r, mut w) = s.split();
 //!                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
 //!             });
 //!         }
@@ -106,7 +106,7 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
-use tokio::sync::oneshot;
+use tokio_sync::oneshot;
 
 mod combinator;
 mod wrapper;
@@ -163,9 +163,9 @@ mod tests {
         let server = thread::spawn(move || {
             // start a tokio echo server
             rt.block_on(async move {
-                while let Some(s) = incoming.next().await.transpose().unwrap() {
-                    let (mut r, mut w) = tokio::io::split(s);
+                while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                     tokio::spawn(async move {
+                        let (mut r, mut w) = s.split();
                         r.copy(&mut w).await.unwrap();
                     });
                 }
@@ -186,9 +186,9 @@ mod tests {
         let (exit, mut incoming) = Valved::new(listener.incoming());
 
         tokio::spawn(async move {
-            while let Some(s) = incoming.next().await.transpose().unwrap() {
-                let (mut r, mut w) = tokio::io::split(s);
+            while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 tokio::spawn(async move {
+                    let (mut r, mut w) = s.split();
                     r.copy(&mut w).await.unwrap();
                 });
             }
@@ -207,9 +207,9 @@ mod tests {
 
         tokio::spawn(async move {
             let mut incoming = select(incoming1, incoming2);
-            while let Some(s) = incoming.next().await.transpose().unwrap() {
-                let (mut r, mut w) = tokio::io::split(s);
+            while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 tokio::spawn(async move {
+                    let (mut r, mut w) = s.split();
                     r.copy(&mut w).await.unwrap();
                 });
             }
@@ -235,10 +235,10 @@ mod tests {
         let reqs = Arc::new(AtomicUsize::new(0));
         let got = reqs.clone();
         tokio::spawn(async move {
-            while let Some(s) = incoming.next().await.transpose().unwrap() {
+            while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 reqs.fetch_add(1, Ordering::SeqCst);
-                let (mut r, mut w) = tokio::io::split(s);
                 tokio::spawn(async move {
+                    let (mut r, mut w) = s.split();
                     r.copy(&mut w).await.unwrap();
                 });
             }
@@ -283,10 +283,10 @@ mod tests {
 
         tokio::spawn(async move {
             let mut incoming = select(incoming1, incoming2);
-            while let Some(s) = incoming.next().await.transpose().unwrap() {
+            while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 reqs.fetch_add(1, Ordering::SeqCst);
-                let (mut r, mut w) = tokio::io::split(s);
                 tokio::spawn(async move {
+                    let (mut r, mut w) = s.split();
                     r.copy(&mut w).await.unwrap();
                 });
             }

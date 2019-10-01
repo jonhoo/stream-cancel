@@ -5,7 +5,7 @@ use pin_project::pin_project;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::sync::oneshot;
+use tokio_sync::oneshot;
 
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
@@ -42,9 +42,9 @@ pub trait StreamExt: Stream {
     ///
     ///     tokio::spawn(async move {
     ///         let mut incoming = listener.incoming().take_until(rx.map(|_| true));
-    ///         while let Some(s) = incoming.next().await.transpose().unwrap() {
-    ///             let (mut r, mut w) = tokio::io::split(s);
+    ///         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
     ///             tokio::spawn(async move {
+    ///                 let (mut r, mut w) = s.split();
     ///                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
     ///             });
     ///         }
@@ -77,7 +77,7 @@ where
 {
     type Item = S::Item;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         if !*this.free {
             if let Poll::Ready(terminate) = this.until.poll(cx) {
@@ -119,7 +119,7 @@ impl Tripwire {
 
 impl Future for Tripwire {
     type Output = bool;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.project().0.poll(cx)
     }
 }
@@ -135,7 +135,7 @@ where
     F: Future<Output = Result<T, E>>,
 {
     type Output = bool;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         ready!(self.project().0.poll(cx)).is_ok().into()
     }
 }

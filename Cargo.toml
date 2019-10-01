@@ -21,10 +21,10 @@ travis-ci = { repository = "jonhoo/stream-cancel" }
 maintenance = { status = "passively-maintained" }
 
 [dependencies]
-futures-core-preview = "0.3.0-alpha.18"
-futures-util-preview = "0.3.0-alpha.18"
-pin-project = "0.4.0-alpha.8"
-tokio = { version = "0.2.0-alpha.5", default-features = false, features = ["sync"] }
+futures-core-preview = "=0.3.0-alpha.19"
+futures-util-preview = "=0.3.0-alpha.19"
+pin-project = "0.4.0"
+tokio-sync = "0.2.0-alpha.6"
 
 [dev-dependencies]
-tokio = "0.2.0-alpha.5"
+tokio = "0.2.0-alpha.6"
