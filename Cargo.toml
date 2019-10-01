@@ -1,6 +1,6 @@
 [package]
 name = "stream-cancel"
-version = "0.5.0-alpha.3"
+version = "0.5.0-alpha.4"
 edition = "2018"
 
 description = "A library for interrupting asynchronous streams."
@@ -24,7 +24,7 @@ maintenance = { status = "passively-maintained" }
 futures-core-preview = "=0.3.0-alpha.19"
 futures-util-preview = "=0.3.0-alpha.19"
 pin-project = "0.4.0"
-tokio-sync = "0.2.0-alpha.6"
+tokio-sync = "=0.2.0-alpha.6"
 
 [dev-dependencies]
-tokio = "0.2.0-alpha.6"
+tokio = "=0.2.0-alpha.6"
