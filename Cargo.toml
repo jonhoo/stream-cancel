@@ -21,8 +21,8 @@ travis-ci = { repository = "jonhoo/stream-cancel" }
 maintenance = { status = "passively-maintained" }
 
 [dependencies]
-futures-core-preview = "=0.3.0-alpha.19"
-futures-util-preview = "=0.3.0-alpha.19"
+futures-core = "0.3"
+futures-util = "0.3"
 pin-project = "0.4.0"
 tokio-sync = "=0.2.0-alpha.6"
 
