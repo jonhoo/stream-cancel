@@ -5,7 +5,7 @@ use pin_project::pin_project;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio_sync::oneshot;
+use tokio::sync::oneshot;
 
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
@@ -31,13 +31,13 @@ pub trait StreamExt: Stream {
     /// If the future resolves with `false`, the stream will be allowed to continue indefinitely.
     ///
     /// ```
-    ///
     /// use stream_cancel::StreamExt;
+    /// use futures::prelude::*;
     /// use tokio::prelude::*;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    ///     let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
     ///     let (tx, rx) = tokio::sync::oneshot::channel();
     ///
     ///     tokio::spawn(async move {
@@ -45,7 +45,7 @@ pub trait StreamExt: Stream {
     ///         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
     ///             tokio::spawn(async move {
     ///                 let (mut r, mut w) = s.split();
-    ///                 println!("copied {} bytes", r.copy(&mut w).await.unwrap());
+    ///                 println!("copied {} bytes", tokio::io::copy(&mut r, &mut w).await.unwrap());
     ///             });
     ///         }
     ///     });
