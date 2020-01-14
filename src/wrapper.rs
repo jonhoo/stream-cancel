@@ -1,13 +1,16 @@
 use crate::{StreamExt, TakeUntil, Trigger, Tripwire};
 use futures_core::stream::Stream;
+use pin_project::pin_project;
+use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// A `Valve` is associated with a [`Trigger`], and can be used to wrap one or more
 /// asynchronous streams. All streams wrapped by a given `Valve` (or its clones) will be
 /// interrupted when [`Trigger::close`] is called on the valve's associated handle.
+#[pin_project]
 #[derive(Clone, Debug)]
-pub struct Valve(Tripwire);
+pub struct Valve(#[pin] Tripwire);
 
 impl Valve {
     /// Make a new `Valve` and an associated [`Trigger`].
@@ -25,6 +28,14 @@ impl Valve {
         S: Stream,
     {
         Valved(stream.take_until(self.0.clone()))
+    }
+
+    /// Check if the valve has been closed.
+    ///
+    /// If `Ready`, contains `true` if the stream should be considered closed, and `false`
+    /// if the `Trigger` has been disabled.
+    pub fn poll_closed(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<bool> {
+        self.project().0.poll(cx)
     }
 }
 
