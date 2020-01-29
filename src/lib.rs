@@ -114,7 +114,7 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 
 mod combinator;
 mod wrapper;
@@ -127,7 +127,7 @@ pub use crate::wrapper::{Valve, Valved};
 /// If the `Trigger` is dropped, any streams associated with it are interrupted (this is equivalent
 /// to calling [`Trigger::close`]. To override this behavior, call [`Trigger::disable`].
 #[derive(Debug)]
-pub struct Trigger(Option<oneshot::Sender<()>>);
+pub struct Trigger(Option<watch::Sender<bool>>);
 
 impl Trigger {
     /// Cancel all associated streams, and make them immediately yield `None`.
@@ -147,7 +147,7 @@ impl Drop for Trigger {
         if let Some(tx) = self.0.take() {
             // Send may fail when all associated rx'es are dropped already
             // so code here cannot panic on error
-            let _ = tx.send(());
+            let _ = tx.broadcast(true);
         }
     }
 }

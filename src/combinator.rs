@@ -1,11 +1,10 @@
 use crate::Trigger;
 use futures_core::{ready, stream::Stream};
-use futures_util::future::{FutureExt, Shared};
 use pin_project::pin_project;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
@@ -107,20 +106,37 @@ where
 /// `Trigger` holding the associated `oneshot::Sender`. There is very little magic.
 #[pin_project]
 #[derive(Clone, Debug)]
-pub struct Tripwire(#[pin] Shared<ResultTrueFalse<oneshot::Receiver<()>>>);
+pub struct Tripwire(#[pin] watch::Receiver<bool>);
 
 impl Tripwire {
     /// Make a new `Tripwire` and an associated [`Trigger`].
     pub fn new() -> (Trigger, Self) {
-        let (tx, rx) = oneshot::channel();
-        (Trigger(Some(tx)), Tripwire(ResultTrueFalse(rx).shared()))
+        let (tx, rx) = watch::channel(false);
+        (Trigger(Some(tx)), Tripwire(rx))
     }
 }
 
 impl Future for Tripwire {
     type Output = bool;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.project().0.poll(cx)
+        let mut this = self.project().0;
+        loop {
+            match this.as_mut().poll_recv_ref(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => {
+                    // channel was closed -- we return whatever the latest value was
+                }
+                Poll::Ready(Some(v)) if *v => {
+                    // value change to true, and we should exit
+                    return Poll::Ready(true);
+                }
+                Poll::Ready(Some(_)) => {
+                    // value is currently false, we need to poll again
+                    continue;
+                }
+            }
+            return Poll::Ready(*this.borrow());
+        }
     }
 }
 
