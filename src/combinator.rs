@@ -8,10 +8,10 @@ use tokio::sync::watch;
 
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
-/// This structure is produced by the [`StreamExt::take_until`] method.
+/// This structure is produced by the [`StreamExt::take_until_if`] method.
 #[pin_project]
 #[derive(Clone, Debug)]
-pub struct TakeUntil<S, F> {
+pub struct TakeUntilIf<S, F> {
     #[pin]
     stream: S,
     #[pin]
@@ -19,15 +19,18 @@ pub struct TakeUntil<S, F> {
     free: bool,
 }
 
-/// This `Stream` extension trait provides a `take_until` method that terminates the stream once
+/// This `Stream` extension trait provides a `take_until_if` method that terminates the stream once
 /// the given future resolves.
 pub trait StreamExt: Stream {
     /// Take elements from this stream until the given future resolves.
     ///
-    /// This function will take elements from this stream until the given future resolves with
-    /// `true`. Once it resolves, the stream will yield `None`, and produce no further elements.
+    /// This function takes elements from this stream until the given future resolves with
+    /// `true`. Once it resolves, the stream yields `None`, and produces no further elements.
     ///
-    /// If the future resolves with `false`, the stream will be allowed to continue indefinitely.
+    /// If the future resolves with `false`, the stream is allowed to continue indefinitely.
+    ///
+    /// This method is essentially a wrapper around `futures_util::stream::StreamExt::take_until`
+    /// that ascribes particular semantics to the output of the provided future.
     ///
     /// ```
     /// use stream_cancel::StreamExt;
@@ -40,7 +43,7 @@ pub trait StreamExt: Stream {
     ///     let (tx, rx) = tokio::sync::oneshot::channel();
     ///
     ///     tokio::spawn(async move {
-    ///         let mut incoming = listener.incoming().take_until(rx.map(|_| true));
+    ///         let mut incoming = listener.incoming().take_until_if(rx.map(|_| true));
     ///         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
     ///             tokio::spawn(async move {
     ///                 let (mut r, mut w) = s.split();
@@ -54,12 +57,12 @@ pub trait StreamExt: Stream {
     ///     // the spawned async block will terminate cleanly, allowing main to return
     /// }
     /// ```
-    fn take_until<U>(self, until: U) -> TakeUntil<Self, U>
+    fn take_until_if<U>(self, until: U) -> TakeUntilIf<Self, U>
     where
         U: Future<Output = bool>,
         Self: Sized,
     {
-        TakeUntil {
+        TakeUntilIf {
             stream: self,
             until,
             free: false,
@@ -69,7 +72,7 @@ pub trait StreamExt: Stream {
 
 impl<S> StreamExt for S where S: Stream {}
 
-impl<S, F> Stream for TakeUntil<S, F>
+impl<S, F> Stream for TakeUntilIf<S, F>
 where
     S: Stream,
     F: Future<Output = bool>,
@@ -96,7 +99,7 @@ where
 
 /// A `Tripwire` is a convenient mechanism for implementing graceful shutdown over many
 /// asynchronous streams. A `Tripwire` is a `Future` that is `Clone`, and that can be passed to
-/// [`StreamExt::take_until`]. All `Tripwire` clones are associated with a single [`Trigger`],
+/// [`StreamExt::take_until_if`]. All `Tripwire` clones are associated with a single [`Trigger`],
 /// which is then used to signal that all the associated streams should be terminated.
 ///
 /// The `Tripwire` future resolves to `true` if the stream should be considered closed, and `false`

@@ -1,4 +1,4 @@
-use crate::{StreamExt, TakeUntil, Trigger, Tripwire};
+use crate::{StreamExt, TakeUntilIf, Trigger, Tripwire};
 use futures_core::stream::Stream;
 use pin_project::pin_project;
 use std::future::Future;
@@ -27,7 +27,7 @@ impl Valve {
     where
         S: Stream,
     {
-        Valved(stream.take_until(self.0.clone()))
+        Valved(stream.take_until_if(self.0.clone()))
     }
 
     /// Check if the valve has been closed.
@@ -44,7 +44,7 @@ impl Valve {
 /// that `Valved` is also produced; when [`Trigger::close`] is called on that handle, the
 /// wrapped stream will immediately yield `None` to indicate that it has completed.
 #[derive(Clone, Debug)]
-pub struct Valved<S>(TakeUntil<S, Tripwire>);
+pub struct Valved<S>(TakeUntilIf<S, Tripwire>);
 
 impl<S> Valved<S> {
     /// Make the given stream cancellable.

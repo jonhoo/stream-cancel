@@ -2,13 +2,13 @@
 //!
 //! # Stream combinator
 //!
-//! The extension trait [`StreamExt`] provides a single new `Stream` combinator: `take_until`.
-//! [`StreamExt::take_until`] continues yielding elements from the underlying `Stream` until a
+//! The extension trait [`StreamExt`] provides a single new `Stream` combinator: `take_until_if`.
+//! [`StreamExt::take_until_if`] continues yielding elements from the underlying `Stream` until a
 //! `Future` resolves, and at that moment immediately yields `None` and stops producing further
 //! elements.
 //!
 //! For convenience, the crate also includes the [`Tripwire`] type, which produces a cloneable
-//! `Future` that can then be passed to `take_until`. When a new `Tripwire` is created, an
+//! `Future` that can then be passed to `take_until_if`. When a new `Tripwire` is created, an
 //! associated [`Trigger`] is also returned, which interrupts the `Stream` when it is dropped.
 //!
 //!
@@ -23,7 +23,7 @@
 //!     let (trigger, tripwire) = Tripwire::new();
 //!
 //!     tokio::spawn(async move {
-//!         let mut incoming = listener.incoming().take_until(tripwire);
+//!         let mut incoming = listener.incoming().take_until_if(tripwire);
 //!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
 //!                 let (mut r, mut w) = s.split();
@@ -119,7 +119,7 @@ use tokio::sync::watch;
 mod combinator;
 mod wrapper;
 
-pub use crate::combinator::{StreamExt, TakeUntil, Tripwire};
+pub use crate::combinator::{StreamExt, TakeUntilIf, Tripwire};
 pub use crate::wrapper::{Valve, Valved};
 
 /// A handle to a set of cancellable streams.
