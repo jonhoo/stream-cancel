@@ -8,44 +8,40 @@ This crate provides multiple mechanisms for interrupting a `Stream`.
 
 ## Stream combinator
 
-The extension trait [`StreamExt`] provides a single new `Stream` combinator: `take_until`.
-[`StreamExt::take_until`] continues yielding elements from the underlying `Stream` until a
+The extension trait [`StreamExt`] provides a single new `Stream` combinator: `take_until_if`.
+[`StreamExt::take_until_if`] continues yielding elements from the underlying `Stream` until a
 `Future` resolves, and at that moment immediately yields `None` and stops producing further
 elements.
 
 For convenience, the crate also includes the [`Tripwire`] type, which produces a cloneable
-`Future` that can then be passed to `take_until`. When a new `Tripwire` is created, an
+`Future` that can then be passed to `take_until_if`. When a new `Tripwire` is created, an
 associated [`Trigger`] is also returned, which interrupts the `Stream` when it is dropped.
 
 
 ```rust
-extern crate tokio;
-
 use stream_cancel::{StreamExt, Tripwire};
+use futures::prelude::*;
 use tokio::prelude::*;
 
-let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-let (trigger, tripwire) = Tripwire::new();
+#[tokio::main]
+async fn main() {
+    let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let (trigger, tripwire) = Tripwire::new();
 
-let mut rt = tokio::runtime::Runtime::new().unwrap();
-rt.spawn(
-    listener
-        .incoming()
-        .take_until(tripwire)
-        .map_err(|e| eprintln!("accept failed = {:?}", e))
-        .for_each(|sock| {
-            let (reader, writer) = sock.split();
-            tokio::spawn(
-                tokio::io::copy(reader, writer)
-                    .map(|amt| println!("wrote {:?} bytes", amt))
-                    .map_err(|err| eprintln!("IO error {:?}", err)),
-            )
-        }),
-);
+    tokio::spawn(async move {
+        let mut incoming = listener.incoming().take_until_if(tripwire);
+        while let Some(mut s) = incoming.next().await.transpose().unwrap() {
+            tokio::spawn(async move {
+                let (mut r, mut w) = s.split();
+                println!("copied {} bytes", tokio::io::copy(&mut r, &mut w).await.unwrap());
+            });
+        }
+    });
 
-// tell the listener to stop accepting new connections
-drop(trigger);
-rt.shutdown_on_idle().wait().unwrap();
+    // tell the listener to stop accepting new connections
+    drop(trigger);
+    // the spawned async block will terminate cleanly, allowing main to return
+}
 ```
 
 ## Stream wrapper
@@ -56,71 +52,67 @@ streams like a `TcpListener`. Once [`Trigger::close`] is called on the handle fo
 stream's [`Valved`], the stream will yield `None` to indicate that it has terminated.
 
 ```rust
-extern crate tokio;
-
 use stream_cancel::Valved;
+use futures::prelude::*;
 use tokio::prelude::*;
 use std::thread;
 
-let listener = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-let (exit, incoming) = Valved::new(listener.incoming());
+#[tokio::main]
+async fn main() {
+    let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
+    let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
 
-let server = thread::spawn(move || {
-    // start a tokio echo server
-    tokio::run(
-        incoming
-            .map_err(|e| eprintln!("accept failed = {:?}", e))
-            .for_each(|sock| {
-                let (reader, writer) = sock.split();
-                tokio::spawn(
-                    tokio::io::copy(reader, writer)
-                        .map(|amt| println!("wrote {:?} bytes", amt))
-                        .map_err(|err| eprintln!("IO error {:?}", err)),
-                )
-            }),
-    )
-});
+    tokio::spawn(async move {
+        let (exit, mut incoming) = Valved::new(listener.incoming());
+        exit_tx.send(exit).unwrap();
+        while let Some(mut s) = incoming.next().await.transpose().unwrap() {
+            tokio::spawn(async move {
+                let (mut r, mut w) = s.split();
+                println!("copied {} bytes", tokio::io::copy(&mut r, &mut w).await.unwrap());
+            });
+        }
+    });
 
-// the server thread will normally never exit, since more connections
-// can always arrive. however, with a Valved, we can turn off the
-// stream of incoming connections to initiate a graceful shutdown
-drop(exit);
-server.join().unwrap();
+    let exit = exit_rx.await;
+
+    // the server thread will normally never exit, since more connections
+    // can always arrive. however, with a Valved, we can turn off the
+    // stream of incoming connections to initiate a graceful shutdown
+    drop(exit);
+}
 ```
 
 You can share the same [`Trigger`] between multiple streams by first creating a [`Valve`],
 and then wrapping multiple streams using [`Valve::Wrap`]:
 
 ```rust
-extern crate tokio;
-
 use stream_cancel::Valve;
+use futures::prelude::*;
 use tokio::prelude::*;
 
-let (exit, valve) = Valve::new();
-let listener1 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-let listener2 = tokio::net::TcpListener::bind(&"0.0.0.0:0".parse().unwrap()).unwrap();
-let incoming1 = valve.wrap(listener1.incoming());
-let incoming2 = valve.wrap(listener2.incoming());
+#[tokio::main]
+async fn main() {
+    let (exit, valve) = Valve::new();
+    let mut listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let mut listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
 
-let mut rt = tokio::runtime::Runtime::new().unwrap();
-rt.spawn(
-    incoming1
-        .select(incoming2)
-        .map_err(|e| eprintln!("accept failed = {:?}", e))
-        .for_each(|sock| {
-            let (reader, writer) = sock.split();
-            tokio::spawn(
-                tokio::io::copy(reader, writer)
-                    .map(|amt| println!("wrote {:?} bytes", amt))
-                    .map_err(|err| eprintln!("IO error {:?}", err)),
-            )
-        }),
-);
+    tokio::spawn(async move {
+        let incoming1 = valve.wrap(listener1.incoming());
+        let incoming2 = valve.wrap(listener2.incoming());
 
-// the runtime will not become idle until both incoming1 and incoming2 have stopped
-// (due to the select). this checks that they are indeed both interrupted when the
-// valve is closed.
-drop(exit);
-rt.shutdown_on_idle().wait().unwrap();
+        use futures_util::stream::select;
+        let mut incoming = select(incoming1, incoming2);
+        while let Some(mut s) = incoming.next().await.transpose().unwrap() {
+            tokio::spawn(async move {
+                let (mut r, mut w) = s.split();
+                println!("copied {} bytes", tokio::io::copy(&mut r, &mut w).await.unwrap());
+            });
+        }
+    });
+
+    // the runtime will not become idle until both incoming1 and incoming2 have stopped
+    // (due to the select). this checks that they are indeed both interrupted when the
+    // valve is closed.
+    drop(exit);
+}
 ```
