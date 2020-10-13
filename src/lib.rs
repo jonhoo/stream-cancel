@@ -42,7 +42,7 @@
 //!
 //! Any stream can be wrapped in a [`Valved`], which enables it to be remotely terminated through
 //! an associated [`Trigger`]. This can be useful to implement graceful shutdown on "infinite"
-//! streams like a `TcpListener`. Once [`Trigger::close`] is called on the handle for a given
+//! streams like a `TcpListener`. Once [`Trigger::cancel`] is called on the handle for a given
 //! stream's [`Valved`], the stream will yield `None` to indicate that it has terminated.
 //!
 //! ```
@@ -125,7 +125,7 @@ pub use crate::wrapper::{Valve, Valved};
 /// A handle to a set of cancellable streams.
 ///
 /// If the `Trigger` is dropped, any streams associated with it are interrupted (this is equivalent
-/// to calling [`Trigger::close`]. To override this behavior, call [`Trigger::disable`].
+/// to calling [`Trigger::cancel`]. To override this behavior, call [`Trigger::disable`].
 #[derive(Debug)]
 pub struct Trigger(Option<watch::Sender<bool>>);
 
