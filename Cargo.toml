@@ -1,6 +1,6 @@
 [package]
 name = "stream-cancel"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2018"
 
 description = "A library for interrupting asynchronous streams."
