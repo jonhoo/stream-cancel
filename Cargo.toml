@@ -24,8 +24,8 @@ maintenance = { status = "passively-maintained" }
 futures-core = "0.3.0"
 futures-util = "0.3.0"
 pin-project = "0.4.0"
-tokio = { version = "0.2.0", features = ["sync", "io-util"] }
+tokio = { version = "0.3.0", features = ["sync", "io-util"] }
 
 [dev-dependencies]
 futures = "0.3.0"
-tokio = { version = "0.2.0", features = ["full"] }
+tokio = { version = "0.3.0", features = ["full"] }

@@ -5,6 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::watch;
+use tokio::pin;
 
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
