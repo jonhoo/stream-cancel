@@ -16,10 +16,6 @@ categories = ["network-programming", "asynchronous"]
 
 license = "MIT/Apache-2.0"
 
-[badges]
-travis-ci = { repository = "jonhoo/stream-cancel" }
-maintenance = { status = "passively-maintained" }
-
 [dependencies]
 futures-core = "0.3.0"
 futures-util = "0.3.0"
