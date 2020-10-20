@@ -19,11 +19,11 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
 //!     let (trigger, tripwire) = Tripwire::new();
 //!
 //!     tokio::spawn(async move {
-//!         let mut incoming = listener.incoming().take_until_if(tripwire);
+//!         let mut incoming = listener.take_until_if(tripwire);
 //!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
 //!                 let (mut r, mut w) = s.split();
@@ -54,10 +54,10 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
-//!     let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
 //!
 //!     tokio::spawn(async move {
-//!         let (exit, mut incoming) = Valved::new(listener.incoming());
+//!         let (exit, mut incoming) = Valved::new(listener);
 //!         exit_tx.send(exit).unwrap();
 //!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
@@ -87,12 +87,12 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let (exit, valve) = Valve::new();
-//!     let mut listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-//!     let mut listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
 //!
 //!     tokio::spawn(async move {
-//!         let incoming1 = valve.wrap(listener1.incoming());
-//!         let incoming2 = valve.wrap(listener2.incoming());
+//!         let incoming1 = valve.wrap(listener1);
+//!         let incoming2 = valve.wrap(listener2);
 //!
 //!         use futures_util::stream::select;
 //!         let mut incoming = select(incoming1, incoming2);
@@ -147,7 +147,7 @@ impl Drop for Trigger {
         if let Some(tx) = self.0.take() {
             // Send may fail when all associated rx'es are dropped already
             // so code here cannot panic on error
-            let _ = tx.broadcast(true);
+            let _ = tx.send(true);
         }
     }
 }
@@ -163,8 +163,8 @@ mod tests {
     fn tokio_run() {
         use std::thread;
 
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let mut listener = rt
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let listener = rt
             .block_on(tokio::net::TcpListener::bind("0.0.0.0:0"))
             .unwrap();
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
@@ -173,7 +173,7 @@ mod tests {
 
             // start a tokio echo server
             rt.block_on(async move {
-                let (exit, mut incoming) = Valved::new(listener.incoming());
+                let (exit, mut incoming) = Valved::new(listener);
                 exit_tx.send(exit).unwrap();
                 while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                     tokio::spawn(async move {
@@ -200,8 +200,8 @@ mod tests {
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
 
         tokio::spawn(async move {
-            let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-            let (exit, mut incoming) = Valved::new(listener.incoming());
+            let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+            let (exit, mut incoming) = Valved::new(listener);
             exit_tx.send(exit).unwrap();
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 tokio::spawn(async move {
@@ -219,10 +219,10 @@ mod tests {
     async fn multi_interrupt() {
         let (exit, valve) = Valve::new();
         tokio::spawn(async move {
-            let mut listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-            let mut listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-            let incoming1 = valve.wrap(listener1.incoming());
-            let incoming2 = valve.wrap(listener2.incoming());
+            let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+            let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+            let incoming1 = valve.wrap(listener1);
+            let incoming2 = valve.wrap(listener2);
 
             let mut incoming = select(incoming1, incoming2);
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
@@ -246,13 +246,13 @@ mod tests {
         };
 
         let (exit, valve) = Valve::new();
-        let mut listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
         let reqs = Arc::new(AtomicUsize::new(0));
         let got = reqs.clone();
         tokio::spawn(async move {
-            let mut incoming = valve.wrap(listener.incoming());
+            let mut incoming = valve.wrap(listener);
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 reqs.fetch_add(1, Ordering::SeqCst);
                 tokio::spawn(async move {
@@ -289,8 +289,8 @@ mod tests {
         };
 
         let (exit, valve) = Valve::new();
-        let mut listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-        let mut listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         let addr1 = listener1.local_addr().unwrap();
         let addr2 = listener2.local_addr().unwrap();
 
@@ -298,8 +298,8 @@ mod tests {
         let got = reqs.clone();
 
         tokio::spawn(async move {
-            let incoming1 = valve.wrap(listener1.incoming());
-            let incoming2 = valve.wrap(listener2.incoming());
+            let incoming1 = valve.wrap(listener1);
+            let incoming2 = valve.wrap(listener2);
             let mut incoming = select(incoming1, incoming2);
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 reqs.fetch_add(1, Ordering::SeqCst);
