@@ -1,6 +1,7 @@
 use crate::Trigger;
 use futures_core::{ready, stream::Stream};
 use pin_project::pin_project;
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -43,7 +44,7 @@ pub trait StreamExt: Stream {
     ///     let (tx, rx) = tokio::sync::oneshot::channel();
     ///
     ///     tokio::spawn(async move {
-    ///         let mut incoming = listener.incoming().take_until_if(rx.map(|_| true));
+    ///         let mut incoming = listener.take_until_if(rx.map(|_| true));
     ///         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
     ///             tokio::spawn(async move {
     ///                 let (mut r, mut w) = s.split();
@@ -108,38 +109,67 @@ where
 /// `Tripwire` is internally implemented using a `Shared<oneshot::Receiver<()>>`, with the
 /// `Trigger` holding the associated `oneshot::Sender`. There is very little magic.
 #[pin_project]
-#[derive(Clone, Debug)]
-pub struct Tripwire(#[pin] watch::Receiver<bool>);
+pub struct Tripwire {
+    watch: watch::Receiver<bool>,
+
+    // TODO: existential type
+    #[pin]
+    fut: Option<Pin<Box<dyn Future<Output = bool> + Send>>>,
+}
+
+impl Clone for Tripwire {
+    fn clone(&self) -> Self {
+        Self {
+            watch: self.watch.clone(),
+            fut: None,
+        }
+    }
+}
+
+impl fmt::Debug for Tripwire {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Tripwise").field(&self.watch).finish()
+    }
+}
 
 impl Tripwire {
     /// Make a new `Tripwire` and an associated [`Trigger`].
     pub fn new() -> (Trigger, Self) {
         let (tx, rx) = watch::channel(false);
-        (Trigger(Some(tx)), Tripwire(rx))
+        (
+            Trigger(Some(tx)),
+            Tripwire {
+                watch: rx,
+                fut: None,
+            },
+        )
     }
 }
 
 impl Future for Tripwire {
     type Output = bool;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.project().0;
-        loop {
-            match this.as_mut().poll_recv_ref(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(None) => {
-                    // channel was closed -- we return whatever the latest value was
+        let mut this = self.project();
+        if this.fut.is_none() {
+            let mut watch = this.watch.clone();
+            this.fut.set(Some(Box::pin(async move {
+                while !*watch.borrow() {
+                    // value is currently false; wait for it to change
+                    if let Err(_) = watch.changed().await {
+                        // channel was closed -- we return whatever the latest value was
+                        return *watch.borrow();
+                    }
                 }
-                Poll::Ready(Some(v)) if *v => {
-                    // value change to true, and we should exit
-                    return Poll::Ready(true);
-                }
-                Poll::Ready(Some(_)) => {
-                    // value is currently false, we need to poll again
-                    continue;
-                }
-            }
-            return Poll::Ready(*this.borrow());
+                // value change to true, and we should exit
+                true
+            })));
         }
+
+        // Safety: we never move the value inside the option.
+        // If the Tripwire is pinned, the Option is pinned, and the future inside is as well.
+        unsafe { this.fut.map_unchecked_mut(|f| f.as_mut().unwrap()) }
+            .as_mut()
+            .poll(cx)
     }
 }
 
