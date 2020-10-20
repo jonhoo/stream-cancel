@@ -19,7 +19,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 //!     let (trigger, tripwire) = Tripwire::new();
 //!
 //!     tokio::spawn(async move {
@@ -54,7 +54,7 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
-//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 //!
 //!     tokio::spawn(async move {
 //!         let (exit, mut incoming) = Valved::new(listener);
@@ -87,8 +87,8 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let (exit, valve) = Valve::new();
-//!     let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-//!     let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+//!     let listener1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+//!     let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 //!
 //!     tokio::spawn(async move {
 //!         let incoming1 = valve.wrap(listener1);
@@ -165,7 +165,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let listener = rt
-            .block_on(tokio::net::TcpListener::bind("0.0.0.0:0"))
+            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
             .unwrap();
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
         let server = thread::spawn(move || {
@@ -200,7 +200,7 @@ mod tests {
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
 
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let (exit, mut incoming) = Valved::new(listener);
             exit_tx.send(exit).unwrap();
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
@@ -219,8 +219,8 @@ mod tests {
     async fn multi_interrupt() {
         let (exit, valve) = Valve::new();
         tokio::spawn(async move {
-            let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-            let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+            let listener1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let incoming1 = valve.wrap(listener1);
             let incoming2 = valve.wrap(listener2);
 
@@ -246,7 +246,7 @@ mod tests {
         };
 
         let (exit, valve) = Valve::new();
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
         let reqs = Arc::new(AtomicUsize::new(0));
@@ -289,8 +289,8 @@ mod tests {
         };
 
         let (exit, valve) = Valve::new();
-        let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-        let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let listener1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr1 = listener1.local_addr().unwrap();
         let addr2 = listener2.local_addr().unwrap();
 

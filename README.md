@@ -24,7 +24,7 @@ use tokio::prelude::*;
 
 #[tokio::main]
 async fn main() {
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let (trigger, tripwire) = Tripwire::new();
 
     tokio::spawn(async move {
@@ -59,7 +59,7 @@ use std::thread;
 #[tokio::main]
 async fn main() {
     let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 
     tokio::spawn(async move {
         let (exit, mut incoming) = Valved::new(listener);
@@ -92,8 +92,8 @@ use tokio::prelude::*;
 #[tokio::main]
 async fn main() {
     let (exit, valve) = Valve::new();
-    let listener1 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
-    let listener2 = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let listener1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 
     tokio::spawn(async move {
         let incoming1 = valve.wrap(listener1);
