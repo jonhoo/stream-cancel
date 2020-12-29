@@ -11,6 +11,8 @@
 //! `Future` that can then be passed to `take_until_if`. When a new `Tripwire` is created, an
 //! associated [`Trigger`] is also returned, which interrupts the `Stream` when it is dropped.
 //!
+//! Note that these examples use tokio 0.3 (not tokio 1.0) because [`Stream` has been temporarily
+//! removed from tokio 1.0](https://github.com/tokio-rs/tokio/issues/2870).
 //!
 //! ```
 //! use stream_cancel::{StreamExt, Tripwire};
@@ -114,7 +116,7 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
-use tokio::sync::watch;
+use tokio1::sync::watch;
 
 mod combinator;
 mod wrapper;
