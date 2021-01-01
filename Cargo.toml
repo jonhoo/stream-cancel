@@ -20,8 +20,8 @@ license = "MIT/Apache-2.0"
 futures-core = "0.3.0"
 futures-util = "0.3.0"
 pin-project = "1.0.0"
-tokio1 = { package = "tokio", version = "1.0", features = ["sync"] }
+tokio = { version = "1.0", features = ["sync"] }
 
 [dev-dependencies]
 futures = "0.3.0"
-tokio = { package = "tokio", version = "0.3.0", features = ["full"] }
+tokio03 = { package = "tokio", version = "0.3.0", features = ["full"] }

@@ -5,7 +5,7 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio1::sync::watch;
+use tokio::sync::watch;
 
 /// A stream combinator which takes elements from a stream until a future resolves.
 ///
@@ -36,7 +36,8 @@ pub trait StreamExt: Stream {
     /// ```
     /// use stream_cancel::StreamExt;
     /// use futures::prelude::*;
-    /// use tokio::prelude::*;
+    /// use tokio03::prelude::*;
+    /// use tokio03 as tokio;
     ///
     /// #[tokio::main]
     /// async fn main() {

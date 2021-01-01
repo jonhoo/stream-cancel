@@ -12,12 +12,13 @@
 //! associated [`Trigger`] is also returned, which interrupts the `Stream` when it is dropped.
 //!
 //! Note that these examples use tokio 0.3 (not tokio 1.0) because [`Stream` has been temporarily
-//! removed from tokio 1.0](https://github.com/tokio-rs/tokio/issues/2870).
+//! removed from tokio 1.0](https://github.com/tokio03-rs/tokio03/issues/2870).
 //!
 //! ```
 //! use stream_cancel::{StreamExt, Tripwire};
 //! use futures::prelude::*;
-//! use tokio::prelude::*;
+//! use tokio03::prelude::*;
+//! use tokio03 as tokio;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -50,8 +51,9 @@
 //! ```
 //! use stream_cancel::Valved;
 //! use futures::prelude::*;
-//! use tokio::prelude::*;
+//! use tokio03::prelude::*;
 //! use std::thread;
+//! use tokio03 as tokio;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -84,7 +86,8 @@
 //! ```
 //! use stream_cancel::Valve;
 //! use futures::prelude::*;
-//! use tokio::prelude::*;
+//! use tokio03::prelude::*;
+//! use tokio03 as tokio;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -116,7 +119,7 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
-use tokio1::sync::watch;
+use tokio::sync::watch;
 
 mod combinator;
 mod wrapper;
@@ -159,7 +162,8 @@ mod tests {
     use super::*;
     use futures::prelude::*;
     use futures_util::stream::select;
-    use tokio::prelude::*;
+    use tokio03 as tokio;
+    use tokio03::prelude::*;
 
     #[test]
     fn tokio_run() {
