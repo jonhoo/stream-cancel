@@ -36,8 +36,7 @@ pub trait StreamExt: Stream {
     /// ```
     /// use stream_cancel::StreamExt;
     /// use futures::prelude::*;
-    /// use tokio03::prelude::*;
-    /// use tokio03 as tokio;
+    /// use tokio_stream::wrappers::TcpListenerStream;
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -45,7 +44,7 @@ pub trait StreamExt: Stream {
     ///     let (tx, rx) = tokio::sync::oneshot::channel();
     ///
     ///     tokio::spawn(async move {
-    ///         let mut incoming = listener.take_until_if(rx.map(|_| true));
+    ///         let mut incoming = TcpListenerStream::new(listener).take_until_if(rx.map(|_| true));
     ///         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
     ///             tokio::spawn(async move {
     ///                 let (mut r, mut w) = s.split();

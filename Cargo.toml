@@ -24,4 +24,5 @@ tokio = { version = "1.0", features = ["sync"] }
 
 [dev-dependencies]
 futures = "0.3.0"
-tokio03 = { package = "tokio", version = "0.3.0", features = ["full"] }
+tokio = { version = "1.0", features = ["full"] }
+tokio-stream = {version="0.1.1", features=["net"]}

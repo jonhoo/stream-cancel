@@ -11,14 +11,11 @@
 //! `Future` that can then be passed to `take_until_if`. When a new `Tripwire` is created, an
 //! associated [`Trigger`] is also returned, which interrupts the `Stream` when it is dropped.
 //!
-//! Note that these examples use tokio 0.3 (not tokio 1.0) because [`Stream` has been temporarily
-//! removed from tokio 1.0](https://github.com/tokio03-rs/tokio03/issues/2870).
 //!
 //! ```
 //! use stream_cancel::{StreamExt, Tripwire};
 //! use futures::prelude::*;
-//! use tokio03::prelude::*;
-//! use tokio03 as tokio;
+//! use tokio_stream::wrappers::TcpListenerStream;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -26,7 +23,7 @@
 //!     let (trigger, tripwire) = Tripwire::new();
 //!
 //!     tokio::spawn(async move {
-//!         let mut incoming = listener.take_until_if(tripwire);
+//!         let mut incoming = TcpListenerStream::new(listener).take_until_if(tripwire);
 //!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
 //!                 let (mut r, mut w) = s.split();
@@ -51,9 +48,8 @@
 //! ```
 //! use stream_cancel::Valved;
 //! use futures::prelude::*;
-//! use tokio03::prelude::*;
+//! use tokio_stream::wrappers::TcpListenerStream;
 //! use std::thread;
-//! use tokio03 as tokio;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -61,7 +57,7 @@
 //!     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 //!
 //!     tokio::spawn(async move {
-//!         let (exit, mut incoming) = Valved::new(listener);
+//!         let (exit, mut incoming) = Valved::new(TcpListenerStream::new(listener));
 //!         exit_tx.send(exit).unwrap();
 //!         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
 //!             tokio::spawn(async move {
@@ -86,8 +82,7 @@
 //! ```
 //! use stream_cancel::Valve;
 //! use futures::prelude::*;
-//! use tokio03::prelude::*;
-//! use tokio03 as tokio;
+//! use tokio_stream::wrappers::TcpListenerStream;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -96,8 +91,8 @@
 //!     let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 //!
 //!     tokio::spawn(async move {
-//!         let incoming1 = valve.wrap(listener1);
-//!         let incoming2 = valve.wrap(listener2);
+//!         let incoming1 = valve.wrap(TcpListenerStream::new(listener1));
+//!         let incoming2 = valve.wrap(TcpListenerStream::new(listener2));
 //!
 //!         use futures_util::stream::select;
 //!         let mut incoming = select(incoming1, incoming2);
@@ -162,8 +157,8 @@ mod tests {
     use super::*;
     use futures::prelude::*;
     use futures_util::stream::select;
-    use tokio03 as tokio;
-    use tokio03::prelude::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_stream::wrappers::TcpListenerStream;
 
     #[test]
     fn tokio_run() {
@@ -179,7 +174,7 @@ mod tests {
 
             // start a tokio echo server
             rt.block_on(async move {
-                let (exit, mut incoming) = Valved::new(listener);
+                let (exit, mut incoming) = Valved::new(TcpListenerStream::new(listener));
                 exit_tx.send(exit).unwrap();
                 while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                     tokio::spawn(async move {
@@ -207,7 +202,7 @@ mod tests {
 
         tokio::spawn(async move {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let (exit, mut incoming) = Valved::new(listener);
+            let (exit, mut incoming) = Valved::new(TcpListenerStream::new(listener));
             exit_tx.send(exit).unwrap();
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 tokio::spawn(async move {
@@ -227,8 +222,8 @@ mod tests {
         tokio::spawn(async move {
             let listener1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let incoming1 = valve.wrap(listener1);
-            let incoming2 = valve.wrap(listener2);
+            let incoming1 = valve.wrap(TcpListenerStream::new(listener1));
+            let incoming2 = valve.wrap(TcpListenerStream::new(listener2));
 
             let mut incoming = select(incoming1, incoming2);
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
@@ -258,7 +253,7 @@ mod tests {
         let reqs = Arc::new(AtomicUsize::new(0));
         let got = reqs.clone();
         tokio::spawn(async move {
-            let mut incoming = valve.wrap(listener);
+            let mut incoming = valve.wrap(TcpListenerStream::new(listener));
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 reqs.fetch_add(1, Ordering::SeqCst);
                 tokio::spawn(async move {
@@ -304,8 +299,8 @@ mod tests {
         let got = reqs.clone();
 
         tokio::spawn(async move {
-            let incoming1 = valve.wrap(listener1);
-            let incoming2 = valve.wrap(listener2);
+            let incoming1 = valve.wrap(TcpListenerStream::new(listener1));
+            let incoming2 = valve.wrap(TcpListenerStream::new(listener2));
             let mut incoming = select(incoming1, incoming2);
             while let Some(mut s) = incoming.next().await.transpose().unwrap() {
                 reqs.fetch_add(1, Ordering::SeqCst);
