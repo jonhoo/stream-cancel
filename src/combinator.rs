@@ -114,7 +114,7 @@ pub struct Tripwire {
 
     // TODO: existential type
     #[pin]
-    fut: Option<Pin<Box<dyn Future<Output = bool> + Send>>>,
+    fut: Option<Pin<Box<dyn Future<Output = bool> + Send + Sync>>>,
 }
 
 impl Clone for Tripwire {
