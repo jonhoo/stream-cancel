@@ -128,7 +128,7 @@ impl Clone for Tripwire {
 
 impl fmt::Debug for Tripwire {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Tripwise").field(&self.watch).finish()
+        f.debug_tuple("Tripwire").field(&self.watch).finish()
     }
 }
 
