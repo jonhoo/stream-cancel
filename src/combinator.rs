@@ -117,6 +117,8 @@ pub struct Tripwire {
     fut: Option<Pin<Box<dyn Future<Output = bool> + Send + Sync>>>,
 }
 
+static_assertions::assert_impl_all!(Tripwire: Sync, Send);
+
 impl Clone for Tripwire {
     fn clone(&self) -> Self {
         Self {

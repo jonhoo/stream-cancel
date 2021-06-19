@@ -20,6 +20,7 @@ license = "MIT/Apache-2.0"
 futures-core = "0.3.0"
 pin-project = "1.0.0"
 tokio = { version = "1.0", features = ["sync"] }
+static_assertions = "1.1.0"
 
 [dev-dependencies]
 futures = "0.3.0"
