@@ -1,4 +1,5 @@
 use crate::Trigger;
+use futures::Sink;
 use futures_core::{ready, stream::Stream};
 use pin_project::pin_project;
 use std::fmt;
@@ -95,6 +96,34 @@ where
         }
 
         this.stream.poll_next(cx)
+    }
+}
+
+impl<S, F, Item> Sink<Item> for TakeUntilIf<S, F>
+where
+    S: Stream + futures::Sink<Item>,
+    F: Future<Output = bool>,
+{
+    type Error = S::Error;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.stream.poll_ready(cx)
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: Item) -> Result<(), Self::Error> {
+        let this = self.project();
+        this.stream.start_send(item)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.stream.poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.stream.poll_close(cx)
     }
 }
 

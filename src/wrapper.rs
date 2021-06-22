@@ -1,4 +1,5 @@
 use crate::{StreamExt, TakeUntilIf, Trigger, Tripwire};
+use futures::sink::Sink;
 use futures_core::stream::Stream;
 use pin_project::pin_project;
 use std::future::Future;
@@ -69,6 +70,33 @@ where
         // safe since we never move nor leak &mut
         let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
         inner.poll_next(cx)
+    }
+}
+
+impl<S, Item> Sink<Item> for Valved<S>
+where
+    S: Stream + futures::Sink<Item>,
+{
+    type Error = S::Error;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
+        inner.poll_ready(cx)
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: Item) -> Result<(), Self::Error> {
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
+        inner.start_send(item)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
+        inner.poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
+        inner.poll_close(cx)
     }
 }
 
