@@ -74,7 +74,7 @@ jobs:
     # https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability
     strategy:
       matrix:
-        msrv: [1.45.0] # tokio 0.3
+        msrv: [1.45.2] # tokio 0.3
     name: ubuntu / ${{ matrix.msrv }}
     steps:
       - uses: actions/checkout@v3
