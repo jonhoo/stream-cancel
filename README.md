@@ -1,7 +1,6 @@
 [![Crates.io](https://img.shields.io/crates/v/stream-cancel.svg)](https://crates.io/crates/stream-cancel)
 [![Documentation](https://docs.rs/stream-cancel/badge.svg)](https://docs.rs/stream-cancel/)
-[![Build Status](https://dev.azure.com/jonhoo/jonhoo/_apis/build/status/stream-cancel?branchName=master)](https://dev.azure.com/jonhoo/jonhoo/_build/latest?definitionId=29&branchName=master)
-[![Coverage Status](https://codecov.io/gh/jonhoo/stream-cancel/branch/master/graph/badge.svg)](https://codecov.io/gh/jonhoo/stream-cancel)
+[![Coverage Status](https://codecov.io/gh/jonhoo/stream-cancel/branch/main/graph/badge.svg)](https://codecov.io/gh/jonhoo/stream-cancel)
 
 This crate provides multiple mechanisms for interrupting a `Stream`.
 
@@ -20,7 +19,7 @@ associated [`Trigger`] is also returned, which interrupts the `Stream` when it i
 ```rust
 use stream_cancel::{StreamExt, Tripwire};
 use futures::prelude::*;
-use tokio::prelude::*;
+use tokio_stream::wrappers::TcpListenerStream;
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +27,7 @@ async fn main() {
     let (trigger, tripwire) = Tripwire::new();
 
     tokio::spawn(async move {
-        let mut incoming = listener.take_until_if(tripwire);
+        let mut incoming = TcpListenerStream::new(listener).take_until_if(tripwire);
         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
             tokio::spawn(async move {
                 let (mut r, mut w) = s.split();
@@ -53,7 +52,7 @@ stream's [`Valved`], the stream will yield `None` to indicate that it has termin
 ```rust
 use stream_cancel::Valved;
 use futures::prelude::*;
-use tokio::prelude::*;
+use tokio_stream::wrappers::TcpListenerStream;
 use std::thread;
 
 #[tokio::main]
@@ -62,7 +61,7 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 
     tokio::spawn(async move {
-        let (exit, mut incoming) = Valved::new(listener);
+        let (exit, mut incoming) = Valved::new(TcpListenerStream::new(listener));
         exit_tx.send(exit).unwrap();
         while let Some(mut s) = incoming.next().await.transpose().unwrap() {
             tokio::spawn(async move {
@@ -87,7 +86,7 @@ and then wrapping multiple streams using [`Valve::Wrap`]:
 ```rust
 use stream_cancel::Valve;
 use futures::prelude::*;
-use tokio::prelude::*;
+use tokio_stream::wrappers::TcpListenerStream;
 
 #[tokio::main]
 async fn main() {
@@ -96,8 +95,8 @@ async fn main() {
     let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 
     tokio::spawn(async move {
-        let incoming1 = valve.wrap(listener1);
-        let incoming2 = valve.wrap(listener2);
+        let incoming1 = valve.wrap(TcpListenerStream::new(listener1));
+        let incoming2 = valve.wrap(TcpListenerStream::new(listener2));
 
         use futures_util::stream::select;
         let mut incoming = select(incoming1, incoming2);
