@@ -57,6 +57,11 @@ impl<S> Valved<S> {
         let (vh, v) = Valve::new();
         (vh, v.wrap(stream))
     }
+
+    /// Consumes this wrapper, returning the underlying stream.
+    pub fn into_inner(self) -> S {
+        self.0.into_inner()
+    }
 }
 
 impl<S> Stream for Valved<S>
