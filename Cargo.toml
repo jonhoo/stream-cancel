@@ -1,13 +1,10 @@
 [package]
 name = "stream-cancel"
 version = "0.8.1"
-edition = "2018"
+edition = "2021"
 rust-version = "1.63.0"
-
-description = "A library for interrupting asynchronous streams."
-readme = "README.md"
-
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
+description = "A library for interrupting asynchronous streams."
 
 homepage = "https://github.com/jonhoo/stream-cancel"
 repository = "https://github.com/jonhoo/stream-cancel.git"
@@ -15,7 +12,7 @@ repository = "https://github.com/jonhoo/stream-cancel.git"
 keywords = ["asynchronous", "futures"]
 categories = ["network-programming", "asynchronous"]
 
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 futures-core = "0.3.0"
