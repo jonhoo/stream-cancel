@@ -20,6 +20,13 @@ pub struct TakeUntilIf<S, F> {
     free: bool,
 }
 
+impl<S, F> TakeUntilIf<S, F> {
+    /// Consumes this combinator, returning the underlying stream.
+    pub fn into_inner(self) -> S {
+        self.stream
+    }
+}
+
 /// This `Stream` extension trait provides a `take_until_if` method that terminates the stream once
 /// the given future resolves.
 pub trait StreamExt: Stream {
