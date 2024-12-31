@@ -1,6 +1,6 @@
 [![Crates.io](https://img.shields.io/crates/v/stream-cancel.svg)](https://crates.io/crates/stream-cancel)
 [![Documentation](https://docs.rs/stream-cancel/badge.svg)](https://docs.rs/stream-cancel/)
-[![Coverage Status](https://codecov.io/gh/jonhoo/stream-cancel/branch/main/graph/badge.svg)](https://codecov.io/gh/jonhoo/stream-cancel)
+[![codecov](https://codecov.io/gh/jonhoo/stream-cancel/graph/badge.svg?token=6XoCSUKWXW)](https://codecov.io/gh/jonhoo/stream-cancel)
 
 This crate provides multiple mechanisms for interrupting a `Stream`.
 
